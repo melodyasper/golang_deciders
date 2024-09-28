@@ -117,16 +117,21 @@ func (c CommandSwitchOff) decide(s State) Event {
 	return EventSwitchedOff{}
 }
 
-func main() {
+func initial_state() State {
 	state_data := StateData{Fitted: false, IsOn: false, RemainingUses: 0}
+	return StateNotFitted{state_data}
+}
+
+func main() {
+	state := initial_state()
 	// Setup commands
 	command_fit := CommandFit{MaxUses: 1}
 	command_switch_on := CommandSwitchOn{}
 	command_switch_off := CommandSwitchOff{}
-
+	
 	// Start
-	event := command_fit.decide(StateNotFitted{state_data})
-	state := event.evolve(StateNotFitted{state_data})
+	event := command_fit.decide(state)
+	state = event.evolve(state)
 
 	fmt.Println("---------------")
 	fmt.Println("Is on         :", state.GetData().IsOn)
