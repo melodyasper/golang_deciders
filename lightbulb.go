@@ -103,7 +103,12 @@ func (e EventBlew) evolve(s State) State {
 
 /* Commands logic */
 func (c CommandFit) decide(s State) Event {
-	return EventFitted{MaxUses: c.MaxUses}
+	switch s.(type) {
+		case StateNotFitted: 
+			return EventFitted{MaxUses: c.MaxUses}
+		default:
+			return nil
+	}
 }
 
 func (c CommandSwitchOn) decide(s State) Event {
@@ -128,7 +133,7 @@ func main() {
 	command_fit := CommandFit{MaxUses: 1}
 	command_switch_on := CommandSwitchOn{}
 	command_switch_off := CommandSwitchOff{}
-	
+
 	// Start
 	event := command_fit.decide(state)
 	state = event.evolve(state)
