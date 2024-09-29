@@ -14,6 +14,7 @@ type State interface {
 	GetData() *StateData
 	IsValid() bool
 }
+
 type StateNotFitted struct {
 	data StateData
 }
@@ -25,6 +26,16 @@ type StateWorking struct {
 type StateBlown struct {
 	data StateData
 }
+
+type Aggregate interface {
+	decide(Command) []Event
+	evolve(Event)
+}
+type Bulb struct {
+	state State
+}
+
+
 
 func (s StateNotFitted) GetData() *StateData {
 	return &s.data
@@ -52,14 +63,14 @@ func (s StateBlown) IsValid() bool {
 }
 
 
-// We are going to need to attach Evolve to state
+// Event with isEvent marker method.
 type Event interface {
-	evolve(State) State
+	isEvent()
 }
 
-// We are going to attach Command to state
+// Command with isCommand marker method.
 type Command interface {
-	decide(State) Event
+	isCommand() 
 }
 
 /* Commands */
@@ -77,97 +88,98 @@ type EventSwitchedOn struct{}
 type EventSwitchedOff struct{}
 type EventBlew struct{}
 
-/* Event logic */
-func (e EventFitted) evolve(s State) State {
-	new_data := StateData{Fitted: true, IsOn: false, RemainingUses: e.MaxUses}
-	return StateWorking{new_data}
-}
+/* Event markers */
+func (e EventFitted) isEvent() {}
+func (e EventSwitchedOn) isEvent() {}
+func (e EventSwitchedOff) isEvent() {}
+func (e EventBlew) isEvent() {}
 
-func (e EventSwitchedOn) evolve(s State) State {
-	current_data := s.GetData()
-	new_data := StateData{Fitted: true, IsOn: true, RemainingUses: current_data.RemainingUses - 1}
-	return StateWorking{new_data}
-}
-
-func (e EventSwitchedOff) evolve(s State) State {
-	current_data := s.GetData()
-	new_data := StateData{Fitted: true, IsOn: false, RemainingUses: current_data.RemainingUses}
-	return StateWorking{new_data}
-}
-
-func (e EventBlew) evolve(s State) State {
-	new_data := StateData{Fitted: true, IsBlown: true, IsOn: false, RemainingUses: 0}
-
-	return StateBlown{new_data}
-}
-
-/* Commands logic */
-func (c CommandFit) decide(s State) Event {
-	switch s.(type) {
-		case StateNotFitted: 
-			return EventFitted{MaxUses: c.MaxUses}
-		default:
-			return nil
-	}
-}
-
-func (c CommandSwitchOn) decide(s State) Event {
-	if s.GetData().RemainingUses <= 0 {
-		return EventBlew{}
-	}
-	return EventSwitchedOn{}
-}
-
-func (c CommandSwitchOff) decide(s State) Event {
-	return EventSwitchedOff{}
-}
+/* Command marker method implementations */
+func (c CommandFit) isCommand() {}
+func (c CommandSwitchOn) isCommand() {}
+func (c CommandSwitchOff) isCommand() {}
 
 func initial_state() State {
 	state_data := StateData{Fitted: false, IsOn: false, RemainingUses: 0}
 	return StateNotFitted{state_data}
 }
 
+func (b Bulb) decide(c Command) []Event {
+	switch cv := c.(type) {
+	case CommandFit:
+		if _, sok := b.state.(StateNotFitted); sok {
+			return []Event{EventFitted{MaxUses: cv.MaxUses}}
+		}
+	case CommandSwitchOn:
+		if sv, sok := b.state.(StateWorking); sok {
+			data := sv.GetData()
+			if !data.IsOn {
+				if data.RemainingUses > 0 {
+					return []Event{EventSwitchedOn{}}
+				}
+				return []Event{EventBlew{}}
+			}
+		}
+	case CommandSwitchOff:
+		if sv, sok := b.state.(StateWorking); sok {
+			if sv.GetData().IsOn {
+				return []Event{EventSwitchedOff{}}
+			}
+		}
+	}
+	return []Event{}
+}
+func (b *Bulb) evolve(e Event) {
+	/* Clone data from pointer */
+	new_data := *(b.state.GetData())
+
+	switch ev := e.(type) {
+		case EventFitted:
+			new_data.Fitted = true
+			new_data.RemainingUses = ev.MaxUses
+			b.state = StateWorking{new_data}
+			return
+
+		case EventSwitchedOn:
+			new_data.RemainingUses -= 1
+			new_data.IsOn = true
+			b.state = StateWorking{new_data}
+			return
+
+		case EventSwitchedOff:
+			new_data.IsOn = false
+			b.state = StateWorking{new_data}
+			return
+
+		case EventBlew:
+			new_data.IsBlown = true
+			new_data.IsOn = false
+			b.state = StateBlown{new_data}
+			return
+	}
+}
+
 func main() {
-	state := initial_state()
 	// Setup commands
 	command_fit := CommandFit{MaxUses: 1}
 	command_switch_on := CommandSwitchOn{}
 	command_switch_off := CommandSwitchOff{}
-
-	// Start
-	event := command_fit.decide(state)
-	state = event.evolve(state)
-
-	fmt.Println("---------------")
-	fmt.Println("Is on         :", state.GetData().IsOn)
-	fmt.Println("Uses remaining:", state.GetData().RemainingUses)
-	fmt.Println("Is bulb blown :", state.GetData().IsBlown)
-
-	// Switch on
-	event = command_switch_on.decide(state)
-	state = event.evolve(state)
-
-	fmt.Println("---------------")
-	fmt.Println("Is on         :", state.GetData().IsOn)
-	fmt.Println("Uses remaining:", state.GetData().RemainingUses)
-	fmt.Println("Is bulb blown :", state.GetData().IsBlown)
-
-	// Switch off
-	event = command_switch_off.decide(state)
-	state = event.evolve(state)
-
-	fmt.Println("---------------")
-	fmt.Println("Is on         :", state.GetData().IsOn)
-	fmt.Println("Uses remaining:", state.GetData().RemainingUses)
-	fmt.Println("Is bulb blown :", state.GetData().IsBlown)
-
-	// Switch on
-	event = command_switch_on.decide(state)
-	state = event.evolve(state)
-
-	fmt.Println("---------------")
-	fmt.Println("Is on         :", state.GetData().IsOn)
-	fmt.Println("Uses remaining:", state.GetData().RemainingUses)
-	fmt.Println("Is bulb blown :", state.GetData().IsBlown)
-
+	commands := []Command{command_fit, command_switch_on, command_switch_off, command_switch_on}
+	bulb := Bulb{state: initial_state()}
+	for idx, command := range commands {
+		fmt.Println("---------------")
+		fmt.Println("Evaluating command ", idx)
+		events := bulb.decide(command)
+		if len(events) == 0 && idx < (len(commands) - 1) {
+			fmt.Println("Unexpected end state")
+		}
+		for _, event := range events {
+			bulb.evolve(event)
+			fmt.Println("Is bulb state valid:", bulb.state.IsValid())
+			fmt.Println("Is on              :", bulb.state.GetData().IsOn)
+			fmt.Println("Uses remaining     :", bulb.state.GetData().RemainingUses)
+			fmt.Println("Is bulb blown      :", bulb.state.GetData().IsBlown)
+		}
+	}
+	
 }
