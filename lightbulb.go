@@ -33,7 +33,7 @@ func (e EventSwitchedOff) String() string {
 	return "EventSwitchedOff {}"
 }
 func (e EventBlew) String() string {
-	return "EventSwitchedOff {}"
+	return "EventBlew {}"
 }
 
 
